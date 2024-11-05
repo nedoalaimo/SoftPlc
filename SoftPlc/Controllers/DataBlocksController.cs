@@ -149,11 +149,12 @@ namespace SoftPlc.Controllers
         [FromRoute] int id,
         [FromQuery] int index,
         [FromQuery] PlcDataType type,
-        [FromBody] object value)
+        [FromBody] object value,
+        [FromQuery] int? bitPosition)
         {
             try
             {
-                plcService.UpdateDatablockValue(id, index, type.ToString(), value);
+                plcService.UpdateDatablockValue(id, index, type.ToString(), value, bitPosition);
                 return Ok();
             }
             catch (DbNotFoundException)

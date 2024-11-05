@@ -167,77 +167,140 @@ namespace SoftPlc.Services
                 throw new DbNotFoundException(id);
         }
 
-        public void UpdateDatablockValue(int id, int index, string type, object value)
+        public void UpdateDatablockValue(int id, int index, string type, object value, int? bitPosition = null)
         {
             DbOutOfRangeException.ThrowIfInvalid(id);
-
             if (!datablocks.TryGetValue(id, out var db))
                 throw new DbNotFoundException(id);
-
             if (index < 0 || index >= db.Data.Length)
                 throw new IndexOutOfRangeException($"Index {index} is out of range for datablock {id} with length {db.Data.Length}");
 
             byte[] convertedBytes;
-
             switch (type.ToLower())
             {
                 case "int":
-                case "integer":
-                    if (index + sizeof(int) > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(int));
-
-                    int intValue = Convert.ToInt32(value);
+                    // S7 INT: 16-bit signed integer
+                    if (index + 2 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 2);
+                    short intValue = Convert.ToInt16(value);
                     convertedBytes = BitConverter.GetBytes(intValue);
-                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(int));
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 2);
                     break;
 
-                case "short":
-                    if (index + sizeof(short) > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(short));
+                case "dint":
+                    // S7 DINT: 32-bit signed integer
+                    if (index + 4 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 4);
+                    int dintValue = Convert.ToInt32(value);
+                    convertedBytes = BitConverter.GetBytes(dintValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 4);
+                    break;
 
-                    short shortValue = Convert.ToInt16(value);
-                    convertedBytes = BitConverter.GetBytes(shortValue);
-                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(short));
+                case "word":
+                    // S7 WORD: 16-bit unsigned integer
+                    if (index + 2 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 2);
+                    ushort wordValue = Convert.ToUInt16(value);
+                    convertedBytes = BitConverter.GetBytes(wordValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 2);
+                    break;
+
+                case "dword":
+                    // S7 DWORD: 32-bit unsigned integer
+                    if (index + 4 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 4);
+                    uint dwordValue = Convert.ToUInt32(value);
+                    convertedBytes = BitConverter.GetBytes(dwordValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 4);
+                    break;
+
+                case "byte":
+                    // S7 BYTE: 8-bit unsigned integer
+                    if (index + 1 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 1);
+                    db.Data[index] = Convert.ToByte(value);
                     break;
 
                 case "bool":
                 case "boolean":
-                    if (index + sizeof(bool) > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(bool));
+                    int bitPos = bitPosition ?? 0;
+                    if (bitPos < 0 || bitPos > 7)
+                        throw new ArgumentException("Bit position must be between 0 and 7");
+
+                    if (index >= db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 1);
 
                     bool boolValue = Convert.ToBoolean(value);
-                    convertedBytes = BitConverter.GetBytes(boolValue);
-                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(bool));
+
+                    // S7 bit ordering is right to left (0 to 7)
+                    if (boolValue)
+                        // Set bit at position - right to left ordering (0 to 7)
+                        db.Data[index] |= (byte)(1 << bitPos);
+                    else
+                        // Clear bit at position - right to left ordering (0 to 7)
+                        db.Data[index] &= (byte)~(1 << bitPos);
                     break;
 
-                case "float":
-                    if (index + sizeof(float) > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(float));
-
-                    float floatValue = Convert.ToSingle(value);
-                    convertedBytes = BitConverter.GetBytes(floatValue);
-                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(float));
-                    break;
-
-                case "double":
-                    if (index + sizeof(double) > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(double));
-
-                    double doubleValue = Convert.ToDouble(value);
-                    convertedBytes = BitConverter.GetBytes(doubleValue);
-                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(double));
+                case "real":
+                    // S7 REAL: 32-bit floating point
+                    if (index + 4 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 4);
+                    float realValue = Convert.ToSingle(value);
+                    convertedBytes = BitConverter.GetBytes(realValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 4);
                     break;
 
                 case "string":
+                    // S7 STRING: Maximum length byte + current length byte + character bytes
                     string stringValue = value.ToString();
-                    byte[] stringBytes = System.Text.Encoding.UTF8.GetBytes(stringValue);
 
-                    // First byte will store string length
-                    if (index + stringBytes.Length + 1 > db.Data.Length)
-                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + stringBytes.Length + 1);
+                    // S7 string header
+                    const int S7_STRING_HEADER_SIZE = 2;  // Max length byte + current length byte
+                    byte maxLength = db.Data[index];      // Read the max length from DB
 
-                    db.Data[index] = (byte)stringBytes.Length;
-                    Array.Copy(stringBytes, 0, db.Data, index + 1, stringBytes.Length);
+                    // Get the actual string bytes (S7 strings are ASCII)
+                    byte[] stringBytes = System.Text.Encoding.ASCII.GetBytes(stringValue);
+                    if (stringBytes.Length > maxLength)
+                        stringBytes = stringBytes.Take(maxLength).ToArray();
+
+                    // Verify space
+                    if (index + S7_STRING_HEADER_SIZE + maxLength > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + S7_STRING_HEADER_SIZE + maxLength);
+
+                    // Current length (don't modify max length as it's predefined)
+                    db.Data[index + 1] = (byte)stringBytes.Length;
+
+                    // Write the string data
+                    Array.Copy(stringBytes, 0, db.Data, index + S7_STRING_HEADER_SIZE, stringBytes.Length);
+
+                    // Fill remaining bytes with zeros
+                    Array.Fill(db.Data, (byte)0, index + S7_STRING_HEADER_SIZE + stringBytes.Length,
+                              maxLength - stringBytes.Length);
+                    break;
+
+                case "time":
+                    // S7 TIME: 32-bit time in milliseconds
+                    if (index + 4 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 4);
+                    int timeValue = Convert.ToInt32(value); // Milliseconds
+                    convertedBytes = BitConverter.GetBytes(timeValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 4);
+                    break;
+
+                case "s5time":
+                    // S7 S5TIME: 16-bit time
+                    if (index + 2 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + 2);
+                    ushort s5timeValue = Convert.ToUInt16(value);
+                    convertedBytes = BitConverter.GetBytes(s5timeValue);
+                    Array.Reverse(convertedBytes);
+                    Array.Copy(convertedBytes, 0, db.Data, index, 2);
                     break;
 
                 default:

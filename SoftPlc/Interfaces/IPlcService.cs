@@ -11,6 +11,6 @@ namespace SoftPlc.Interfaces
 		void UpdateDatablockData(int id, byte[] data);
 		void RemoveDatablock(int id);
 		void SaveDatablocks();
-        void UpdateDatablockValue(int id, int index, string type, object value);
+        void UpdateDatablockValue(int id, int index, string type, object value, int? bitPosition);
     }
 }
