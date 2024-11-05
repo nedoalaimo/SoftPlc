@@ -166,5 +166,83 @@ namespace SoftPlc.Services
             else
                 throw new DbNotFoundException(id);
         }
-	}
+
+        public void UpdateDatablockValue(int id, int index, string type, object value)
+        {
+            DbOutOfRangeException.ThrowIfInvalid(id);
+
+            if (!datablocks.TryGetValue(id, out var db))
+                throw new DbNotFoundException(id);
+
+            if (index < 0 || index >= db.Data.Length)
+                throw new IndexOutOfRangeException($"Index {index} is out of range for datablock {id} with length {db.Data.Length}");
+
+            byte[] convertedBytes;
+
+            switch (type.ToLower())
+            {
+                case "int":
+                case "integer":
+                    if (index + sizeof(int) > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(int));
+
+                    int intValue = Convert.ToInt32(value);
+                    convertedBytes = BitConverter.GetBytes(intValue);
+                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(int));
+                    break;
+
+                case "short":
+                    if (index + sizeof(short) > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(short));
+
+                    short shortValue = Convert.ToInt16(value);
+                    convertedBytes = BitConverter.GetBytes(shortValue);
+                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(short));
+                    break;
+
+                case "bool":
+                case "boolean":
+                    if (index + sizeof(bool) > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(bool));
+
+                    bool boolValue = Convert.ToBoolean(value);
+                    convertedBytes = BitConverter.GetBytes(boolValue);
+                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(bool));
+                    break;
+
+                case "float":
+                    if (index + sizeof(float) > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(float));
+
+                    float floatValue = Convert.ToSingle(value);
+                    convertedBytes = BitConverter.GetBytes(floatValue);
+                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(float));
+                    break;
+
+                case "double":
+                    if (index + sizeof(double) > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + sizeof(double));
+
+                    double doubleValue = Convert.ToDouble(value);
+                    convertedBytes = BitConverter.GetBytes(doubleValue);
+                    Array.Copy(convertedBytes, 0, db.Data, index, sizeof(double));
+                    break;
+
+                case "string":
+                    string stringValue = value.ToString();
+                    byte[] stringBytes = System.Text.Encoding.UTF8.GetBytes(stringValue);
+
+                    // First byte will store string length
+                    if (index + stringBytes.Length + 1 > db.Data.Length)
+                        throw new DateExceedsDbLengthException(id, db.Data.Length, index + stringBytes.Length + 1);
+
+                    db.Data[index] = (byte)stringBytes.Length;
+                    Array.Copy(stringBytes, 0, db.Data, index + 1, stringBytes.Length);
+                    break;
+
+                default:
+                    throw new ArgumentException($"Unsupported type: {type}");
+            }
+        }
+    }
 }

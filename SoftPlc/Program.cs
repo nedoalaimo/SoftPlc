@@ -2,12 +2,21 @@
 using SoftPlc.Exceptions;
 using SoftPlc.Interfaces;
 using SoftPlc.Services;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddSingleton<IPlcService, PlcService>();
-builder.Services.AddControllers().AddNewtonsoftJson();
+
+// Configure JSON options for enums
+builder.Services.AddControllers()
+    .AddNewtonsoftJson()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -28,7 +37,15 @@ builder.Services.AddSwaggerGen(c =>
             Url = new Uri("https://github.com/fbarresi/SoftPlc/blob/master/LICENSE")
         }
     });
+
+    // Configure Swagger to use enum names instead of integers
+    c.SchemaFilter<EnumSchemaFilter>();
+
+    // Optional: Use string values for enums in query parameters
+    c.UseOneOfForPolymorphism();
+    c.CustomSchemaIds(type => type.ToString());
 });
+
 builder.Services.AddExceptionHandler<DbAccessExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -43,11 +60,8 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseCors(options => options.AllowAnyOrigin());
-
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.UseExceptionHandler();
 app.MapControllers();
 

@@ -45,5 +45,10 @@ namespace SoftPlc.Services
         {
             throw new System.NotImplementedException();
         }
+
+        public void UpdateDatablockValue(int id, int index, string type, object value)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
